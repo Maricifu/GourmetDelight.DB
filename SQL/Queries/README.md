@@ -320,18 +320,154 @@ WHERE
 ```
 
 # Procedimientos Almacenados
+```sql
+SHOW PROCEDURE STATUS WHERE Db = 'GourmetDelight';
+```
 
 ### Crear un procedimiento almacenado para agregar un nuevo cliente
 - Enunciado: Crea un procedimiento almacenado llamado AgregarCliente que reciba como parámetros el nombre, correo electrónico, teléfono y fecha de registro de un nuevo cliente y lo inserte en la tabla Clientes .
 
+```sql
+DELIMITER $$
+DROP PROCEDURE IF EXISTS AgregarCliente;
+
+CREATE PROCEDURE AgregarCliente(
+    IN p_nombre VARCHAR(100),
+    IN p_correo_electronico VARCHAR(100),
+    IN p_telefono VARCHAR(15),
+    IN p_fecha_registro DATE
+)
+BEGIN
+    INSERT INTO gourmetclientes (nombre, correo_electronico, telefono, fecha_registro)
+    VALUES (p_nombre, p_correo_electronico, p_telefono, p_fecha_registro);
+END$$
+DELIMITER ;
+
+CALL GourmetDelight.AgregarCliente('Mari Cifu', 'mari@example.com', '1234567890', '2024-06-30');
+
+```
+
 ### Crear un procedimiento almacenado para obtener los detalles de un pedido
 - Enunciado: Crea un procedimiento almacenado llamado ObtenerDetallesPedido que reciba como parámetro el ID del pedido y devuelva los detalles del pedido, incluyendo el nombre del menú, cantidad y precio unitario.
+
+```sql
+DELIMITER $$
+DROP PROCEDURE IF EXISTS ObtenerDetallesPedido;
+
+CREATE PROCEDURE ObtenerDetallesPedido(
+    IN p_id_pedido INT
+)
+BEGIN
+    SELECT gm.nombre AS nombre_menu, gdp.cantidad, gdp.precio_unitario
+    FROM gourmetdetallespedidos gdp
+    INNER JOIN gourmetmenus gm ON gdp.id_menu = gm.id_menu
+    WHERE gdp.id_pedido = p_id_pedido;
+END$$
+
+DELIMITER ;
+
+CALL ObtenerDetallesPedido(1);
+```
 
 ### Crear un procedimiento almacenado para actualizar el precio de un menú
 - Enunciado: Crea un procedimiento almacenado llamado ActualizarPrecioMenu que reciba como parámetros el ID del menú y el nuevo precio, y actualice el precio del menú en la tabla Menus .
 
+```sql
+DELIMITER $$
+DROP PROCEDURE IF EXISTS ActualizarPrecioMenu;
+
+CREATE PROCEDURE ActualizarPrecioMenu(
+    IN p_id_menu INT,
+    IN p_nuevo_precio DECIMAL(10,2)
+)
+BEGIN
+    UPDATE gourmetmenus
+    SET precio = p_nuevo_precio
+    WHERE id_menu = p_id_menu;
+END$$
+
+DELIMITER ;
+
+CALL ActualizarPrecioMenu(1, 15.99);
+```
+
 ### Crear un procedimiento almacenado para eliminar un cliente y sus pedidos
 - Enunciado: Crea un procedimiento almacenado llamado EliminarCliente que reciba como parámetro el ID del cliente y elimine el cliente junto con todos sus pedidos y los detalles de los pedidos.
 
+```sql
+DELIMITER $$
+DROP PROCEDURE IF EXISTS EliminarCliente;
+
+CREATE PROCEDURE EliminarCliente(
+    IN p_id_cliente INT
+)
+BEGIN
+    DECLARE v_id_pedido INT;
+    
+    DECLARE cur_pedidos CURSOR FOR
+        SELECT id_pedido
+        FROM gourmetpedidos
+        WHERE id_cliente = p_id_cliente;
+    
+    DECLARE CONTINUE HANDLER FOR NOT FOUND SET @finished = TRUE;
+    
+    OPEN cur_pedidos;
+    FETCH cur_pedidos INTO v_id_pedido;
+    
+    @finished = FALSE;
+    WHILE NOT @finished DO
+        DELETE FROM gourmetdetallespedidos
+        WHERE id_pedido = v_id_pedido;
+        
+        FETCH cur_pedidos INTO v_id_pedido;
+    END WHILE;
+    
+    CLOSE cur_pedidos;
+    
+    DELETE FROM gourmetpedidos
+    WHERE id_cliente = p_id_cliente;
+    
+    DELETE FROM gourmetclientes
+    WHERE id_cliente = p_id_cliente;
+    
+END$$
+
+DELIMITER ;
+
+CALL EliminarCliente(1);
+```
+
 ### Crear un procedimiento almacenado para obtener el total gastado por un cliente
 - Enunciado: Crea un procedimiento almacenado llamado TotalGastadoPorCliente que reciba como parámetro el ID del cliente y devuelva el total gastado por ese cliente en todos sus pedidos.
+
+```sql
+DELIMITER $$
+DROP PROCEDURE IF EXISTS TotalGastadoPorCliente;
+
+CREATE PROCEDURE TotalGastadoPorCliente(
+    IN p_id_cliente INT,
+    OUT p_total_gastado DECIMAL(10,2)
+)
+BEGIN
+    SELECT SUM(gp.total)
+    INTO p_total_gastado
+    FROM gourmetpedidos gp
+    WHERE gp.id_cliente = p_id_cliente;
+    
+    IF p_total_gastado IS NULL THEN
+        SET p_total_gastado = 0;
+    END IF;
+    
+END$$
+
+DELIMITER ;
+
+-- almacena el total gastado
+SET @total_gastado := 0;
+
+-- llama el procedimiento
+CALL TotalGastadoPorCliente(1, @total_gastado);
+
+-- muestra el resultado
+SELECT @total_gastado AS total_gastado;
+```
